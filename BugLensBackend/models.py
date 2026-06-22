@@ -17,5 +17,7 @@ class Report(Base):
     screenshot_path = Column(String)
     metadata_json = Column(Text)
     severity = Column(String, default="Medium")
+    report_type = Column(String, default="bug")
+    stack_trace = Column(Text)
     status = Column(String)
     created_at = Column(BigInteger)

@@ -3,8 +3,8 @@ from uuid import uuid4
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 import os
-
 import json
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -47,6 +47,11 @@ VALID_STATUSES = [
     "closed",
 ]
 
+VALID_REPORT_TYPES = [
+    "bug",
+    "crash",
+]
+
 
 def report_to_out(report: Report) -> ReportOut:
     return ReportOut(
@@ -62,6 +67,8 @@ def report_to_out(report: Report) -> ReportOut:
         screenshot_path=report.screenshot_path,
         metadata=json.loads(report.metadata_json or "{}"),
         severity=report.severity or "Medium",
+        report_type=report.report_type or "bug",
+        stack_trace=report.stack_trace,
         status=report.status,
         created_at=datetime.fromtimestamp(report.created_at / 1000)
         if report.created_at
@@ -80,27 +87,36 @@ async def upload_screenshot(file: UploadFile = File(...)):
         "url": f"http://10.0.2.2:8000/{file_path}"
     }
 
+
 @app.post("/reports", response_model=ReportResponse)
 def create_report(report: ReportCreate, db: Session = Depends(get_db)):
+    if report.report_type not in VALID_REPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
+        )
+
     report_id = str(uuid4())
     created_at = int(datetime.now().timestamp() * 1000)
 
     db_report = Report(
-    report_id=report_id,
-    api_key=report.api_key,
-    user_id=report.user_id,
-    title=report.title,
-    description=report.description,
-    device_model=report.device_model,
-    manufacturer=report.manufacturer,
-    android_version=report.android_version,
-    app_version=report.app_version,
-    screenshot_path=report.screenshot_path,
-    metadata_json=json.dumps(report.metadata or {}),
-    severity=report.severity,
-    status="open",
-    created_at=created_at,
-)
+        report_id=report_id,
+        api_key=report.api_key,
+        user_id=report.user_id,
+        title=report.title,
+        description=report.description,
+        device_model=report.device_model,
+        manufacturer=report.manufacturer,
+        android_version=report.android_version,
+        app_version=report.app_version,
+        screenshot_path=report.screenshot_path,
+        metadata_json=json.dumps(report.metadata or {}),
+        severity=report.severity,
+        report_type=report.report_type,
+        stack_trace=report.stack_trace,
+        status="open",
+        created_at=created_at,
+    )
 
     db.add(db_report)
     db.commit()
@@ -129,6 +145,24 @@ def get_reports_by_status(status: str, db: Session = Depends(get_db)):
     reports = (
         db.query(Report)
         .filter(Report.status == status)
+        .order_by(Report.created_at.desc())
+        .all()
+    )
+
+    return [report_to_out(report) for report in reports]
+
+
+@app.get("/reports/type/{report_type}", response_model=List[ReportOut])
+def get_reports_by_type(report_type: str, db: Session = Depends(get_db)):
+    if report_type not in VALID_REPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
+        )
+
+    reports = (
+        db.query(Report)
+        .filter(Report.report_type == report_type)
         .order_by(Report.created_at.desc())
         .all()
     )

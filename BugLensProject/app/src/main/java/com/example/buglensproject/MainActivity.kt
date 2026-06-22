@@ -34,9 +34,14 @@ class MainActivity : AppCompatActivity() {
         )
 
         BugLens.enableShakeToReport(this)
+        BugLens.enableCrashReporting()
 
         findViewById<Button>(R.id.btnBugLens).setOnClickListener {
             BugLens.showReporter(this)
+        }
+
+        findViewById<Button>(R.id.btnCrash).setOnClickListener {
+            throw RuntimeException("BugLens test crash")
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { view, insets ->

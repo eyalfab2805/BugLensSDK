@@ -78,6 +78,8 @@ class BugReportDialog(
                     androidVersion = DeviceInfoCollector.getAndroidVersion(),
                     appVersion = DeviceInfoCollector.getAppVersion(context),
                     screenshotPath = screenshotPath,
+                    reportType = "bug",
+                    stackTrace = null,
                     createdAt = System.currentTimeMillis()
                 )
 

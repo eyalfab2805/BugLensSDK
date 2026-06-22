@@ -5,8 +5,14 @@ import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.widget.Toast
+import com.buglens.sdk.collectors.DeviceInfoCollector
+import com.buglens.sdk.models.BugReport
 import com.buglens.sdk.reporter.BugReportDialog
 import com.buglens.sdk.shake.ShakeDetector
+import com.buglens.sdk.upload.ReportApiUploader
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.util.UUID
 
 object BugLens {
 
@@ -17,6 +23,8 @@ object BugLens {
 
     private var sensorManager: SensorManager? = null
     private var shakeDetector: ShakeDetector? = null
+
+    private var previousCrashHandler: Thread.UncaughtExceptionHandler? = null
 
     fun init(context: Context, apiKey: String) {
         this.appContext = context.applicationContext
@@ -75,6 +83,44 @@ object BugLens {
     }
 
     fun enableCrashReporting() {
-        // TODO
+        val context = appContext ?: return
+
+        previousCrashHandler = Thread.getDefaultUncaughtExceptionHandler()
+
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+
+            val stackTrace = getStackTrace(throwable)
+
+            val crashReport = BugReport(
+                reportId = UUID.randomUUID().toString(),
+                apiKey = apiKey ?: "missing-api-key",
+                userId = userId,
+                title = "Crash: ${throwable.javaClass.simpleName}",
+                description = throwable.message ?: "Application crashed",
+                severity = "Critical",
+                reportType = "crash",
+                stackTrace = stackTrace,
+                metadata = metadata.toMap(),
+                deviceModel = DeviceInfoCollector.getDeviceModel(),
+                manufacturer = DeviceInfoCollector.getManufacturer(),
+                androidVersion = DeviceInfoCollector.getAndroidVersion(),
+                appVersion = DeviceInfoCollector.getAppVersion(context),
+                createdAt = System.currentTimeMillis(),
+                screenshotPath = null
+            )
+
+            ReportApiUploader.upload(context, crashReport)
+
+            Thread.sleep(1000)
+
+            previousCrashHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun getStackTrace(throwable: Throwable): String {
+        val stringWriter = StringWriter()
+        val printWriter = PrintWriter(stringWriter)
+        throwable.printStackTrace(printWriter)
+        return stringWriter.toString()
     }
 }

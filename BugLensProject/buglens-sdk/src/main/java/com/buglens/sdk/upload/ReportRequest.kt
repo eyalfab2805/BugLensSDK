@@ -7,6 +7,8 @@ data class ReportRequest(
     val title: String,
     val description: String,
     val severity: String,
+    val report_type: String,
+    val stack_trace: String?,
     val device_model: String,
     val manufacturer: String,
     val android_version: String,

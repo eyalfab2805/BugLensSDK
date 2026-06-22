@@ -16,6 +16,8 @@ class ReportCreate(BaseModel):
     screenshot_path: Optional[str] = None
     metadata: Optional[Dict[str, str]] = None
     severity: str = "Medium"
+    report_type: str = "bug"
+    stack_trace: Optional[str] = None
 
 
 class ReportResponse(BaseModel):
@@ -36,6 +38,8 @@ class ReportOut(BaseModel):
     screenshot_path: Optional[str] = None
     metadata: Optional[Dict[str, str]] = None
     severity: str
+    report_type: str
+    stack_trace: Optional[str] = None
     status: str
     created_at: Optional[datetime] = None
 

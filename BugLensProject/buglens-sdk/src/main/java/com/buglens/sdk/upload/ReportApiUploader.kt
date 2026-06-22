@@ -86,6 +86,8 @@ object ReportApiUploader {
             app_version = report.appVersion,
             screenshot_path = screenshotUrl ?: report.screenshotPath,
             created_at = report.createdAt,
+            report_type = report.reportType,
+            stack_trace = report.stackTrace,
             metadata = report.metadata
         )
 
