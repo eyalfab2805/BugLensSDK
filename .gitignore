@@ -1,0 +1,30 @@
+# Android
+.gradle/
+.idea/
+build/
+captures/
+local.properties
+*.iml
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# React
+node_modules/
+dist/
+
+# Databases
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime uploads
+BugLensBackend/uploads/
+BugLensBackend/buglens.db
