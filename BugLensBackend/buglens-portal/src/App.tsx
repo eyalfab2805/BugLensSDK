@@ -18,6 +18,7 @@ import "./App.css";
 
 type ReportStatus = "open" | "in_progress" | "resolved" | "closed";
 type ReportSeverity = "Low" | "Medium" | "High" | "Critical";
+type ReportType = "bug" | "crash";
 
 type BugReport = {
   report_id: string;
@@ -26,6 +27,8 @@ type BugReport = {
   title: string;
   description: string;
   severity: ReportSeverity;
+  report_type: ReportType;
+  stack_trace: string | null;
   device_model: string | null;
   manufacturer: string | null;
   android_version: string | null;
@@ -58,12 +61,18 @@ const API_BASE_URL = "http://127.0.0.1:8000";
 
 const statuses: ReportStatus[] = ["open", "in_progress", "resolved", "closed"];
 const severities: ReportSeverity[] = ["Low", "Medium", "High", "Critical"];
+const reportTypes: ReportType[] = ["bug", "crash"];
 
 const statusLabels: Record<ReportStatus, string> = {
   open: "Open",
   in_progress: "In Progress",
   resolved: "Resolved",
   closed: "Closed",
+};
+
+const reportTypeLabels: Record<ReportType, string> = {
+  bug: "🐞 Bug",
+  crash: "💥 Crash",
 };
 
 const chartColors = [
@@ -163,6 +172,10 @@ function App() {
 
   const totalReports = reports.length;
 
+  const totalCrashes = reports.filter(
+    (report) => report.report_type === "crash"
+  ).length;
+
   const criticalReports = reports.filter(
     (report) => report.severity === "Critical"
   ).length;
@@ -229,6 +242,11 @@ function App() {
   const severityChartData: CountItem[] = severities.map((severity) => ({
     name: severity,
     value: reports.filter((report) => report.severity === severity).length,
+  }));
+
+  const reportTypeChartData: CountItem[] = reportTypes.map((type) => ({
+    name: reportTypeLabels[type],
+    value: reports.filter((report) => report.report_type === type).length,
   }));
 
   const androidChartData = useMemo(
@@ -316,6 +334,11 @@ function App() {
       <section className="kpi-grid">
         <MetricCard label="Total reports" value={totalReports.toString()} />
         <MetricCard
+          label="Total crashes"
+          value={totalCrashes.toString()}
+          tone="danger"
+        />
+        <MetricCard
           label="Critical bugs"
           value={criticalReports.toString()}
           tone="danger"
@@ -347,7 +370,9 @@ function App() {
         <div>
           <span className="section-label">Operational summary</span>
           <h2>
-            {criticalReports > 0
+            {totalCrashes > 0
+              ? `${totalCrashes} crash reports captured automatically`
+              : criticalReports > 0
               ? `${criticalReports} critical bugs require immediate attention`
               : unresolvedReports > 0
               ? `${unresolvedReports} reports still require engineering attention`
@@ -377,6 +402,42 @@ function App() {
       </section>
 
       <section className="analytics-grid">
+        <ChartCard
+          title="Bug vs crash distribution"
+          legend={reportTypeChartData}
+          onLegendClick={(name) => {
+            const type = name.includes("Crash") ? "crash" : "bug";
+            openRelevantReport((report) => report.report_type === type);
+          }}
+        >
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={reportTypeChartData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={92}
+                cursor="pointer"
+                onClick={(data: ChartClickData) => {
+                  const name = data?.name;
+                  if (!name) return;
+
+                  const type = name.includes("Crash") ? "crash" : "bug";
+                  openRelevantReport((report) => report.report_type === type);
+                }}
+              >
+                {reportTypeChartData.map((entry, index) => (
+                  <Cell
+                    key={entry.name}
+                    fill={chartColors[index % chartColors.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
         <ChartCard
           title="Lifecycle breakdown"
           legend={statusChartData}
@@ -722,6 +783,7 @@ function App() {
                   <tr>
                     <th>Status</th>
                     <th>Severity</th>
+                    <th>Type</th>
                     <th>Issue</th>
                     <th>Device</th>
                     <th>Android</th>
@@ -755,6 +817,12 @@ function App() {
                           className={`severity-pill ${report.severity.toLowerCase()}`}
                         >
                           {report.severity}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span className={`type-pill ${report.report_type}`}>
+                          {reportTypeLabels[report.report_type]}
                         </span>
                       </td>
 
@@ -826,6 +894,10 @@ function App() {
 
               <div className="debug-grid">
                 <Info label="Severity" value={selectedReport.severity} />
+                <Info
+                  label="Type"
+                  value={reportTypeLabels[selectedReport.report_type]}
+                />
                 <Info label="User ID" value={selectedReport.user_id} />
                 <Info label="Screen" value={getMetadataValue(selectedReport, "screen")} />
                 <Info
@@ -839,6 +911,23 @@ function App() {
                 <Info label="API Key" value={selectedReport.api_key} />
                 <Info label="Created At" value={formatDate(selectedReport.created_at)} />
               </div>
+
+              {selectedReport.report_type === "crash" &&
+                selectedReport.stack_trace && (
+                  <div className="metadata-panel">
+                    <span className="section-label">Crash stack trace</span>
+                    <pre
+                      style={{
+                        overflowX: "auto",
+                        whiteSpace: "pre-wrap",
+                        fontSize: "12px",
+                        lineHeight: "1.6",
+                      }}
+                    >
+                      {selectedReport.stack_trace}
+                    </pre>
+                  </div>
+                )}
 
               {selectedReport.metadata &&
                 Object.keys(selectedReport.metadata).length > 0 && (
