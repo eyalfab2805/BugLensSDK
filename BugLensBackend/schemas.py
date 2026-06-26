@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class ReportCreate(BaseModel):
+    report_id: Optional[str] = None
     api_key: str
     user_id: Optional[str] = None
     title: str

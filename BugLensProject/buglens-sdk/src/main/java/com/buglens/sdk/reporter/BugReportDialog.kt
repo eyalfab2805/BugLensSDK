@@ -13,7 +13,6 @@ import com.buglens.sdk.collectors.DeviceInfoCollector
 import com.buglens.sdk.models.BugReport
 import com.buglens.sdk.repository.ReportRepository
 import java.util.UUID
-import com.buglens.sdk.upload.ReportApiUploader
 
 class BugReportDialog(
     private val context: Context,
@@ -82,16 +81,16 @@ class BugReportDialog(
                     stackTrace = null,
                     createdAt = System.currentTimeMillis()
                 )
-
-                ReportRepository.save(report)
-                ReportApiUploader.upload(context, report)
+                android.util.Log.d("BugLens", "Selected severity: ${report.severity}")
+                ReportRepository.submit(context, report)
 
                 AlertDialog.Builder(context)
-                    .setTitle("Report Saved")
+                    .setTitle("Report Submitted")
                     .setMessage(
                         """
-                        Total Reports:
-                        ${ReportRepository.getAll().size}
+                        Report was submitted.
+
+                        If the device has no internet connection, BugLens will save it locally and retry later.
 
                         Severity:
                         ${report.severity}

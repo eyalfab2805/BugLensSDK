@@ -23,11 +23,15 @@ object ReportApiUploader {
     private val reportApi = retrofit.create(ReportApi::class.java)
     private val screenshotApi = retrofit.create(ScreenshotApi::class.java)
 
-    fun upload(context: Context, report: BugReport) {
+    fun upload(
+        context: Context,
+        report: BugReport,
+        onResult: (Boolean) -> Unit
+    ) {
         val screenshotPath = report.screenshotPath
 
         if (screenshotPath.isNullOrBlank()) {
-            uploadReport(report, null)
+            uploadReport(report, null, onResult)
             return
         }
 
@@ -35,12 +39,11 @@ object ReportApiUploader {
 
         if (!screenshotFile.exists()) {
             Log.e("BugLens", "Screenshot file does not exist: $screenshotPath")
-            uploadReport(report, null)
+            uploadReport(report, null, onResult)
             return
         }
 
-        val requestBody = screenshotFile
-            .asRequestBody("image/png".toMediaTypeOrNull())
+        val requestBody = screenshotFile.asRequestBody("image/png".toMediaTypeOrNull())
 
         val multipartFile = MultipartBody.Part.createFormData(
             name = "file",
@@ -57,22 +60,25 @@ object ReportApiUploader {
                     if (response.isSuccessful) {
                         val screenshotUrl = response.body()?.url
                         Log.d("BugLens", "Screenshot uploaded: $screenshotUrl")
-                        uploadReport(report, screenshotUrl)
+                        uploadReport(report, screenshotUrl, onResult)
                     } else {
                         Log.e("BugLens", "Screenshot upload failed: ${response.code()}")
-                        Log.e("BugLens", "Screenshot error body: ${response.errorBody()?.string()}")
-                        uploadReport(report, null)
+                        onResult(false)
                     }
                 }
 
                 override fun onFailure(call: Call<ScreenshotUploadResponse>, t: Throwable) {
                     Log.e("BugLens", "Screenshot upload error", t)
-                    uploadReport(report, null)
+                    onResult(false)
                 }
             })
     }
 
-    private fun uploadReport(report: BugReport, screenshotUrl: String?) {
+    private fun uploadReport(
+        report: BugReport,
+        screenshotUrl: String?,
+        onResult: (Boolean) -> Unit
+    ) {
         val request = ReportRequest(
             report_id = report.reportId,
             api_key = report.apiKey,
@@ -98,14 +104,17 @@ object ReportApiUploader {
             ) {
                 if (response.isSuccessful) {
                     Log.d("BugLens", "Report uploaded to FastAPI: ${response.body()}")
+                    onResult(true)
                 } else {
                     Log.e("BugLens", "FastAPI upload failed: ${response.code()}")
                     Log.e("BugLens", "FastAPI error body: ${response.errorBody()?.string()}")
+                    onResult(false)
                 }
             }
 
             override fun onFailure(call: Call<ReportResponse>, t: Throwable) {
                 Log.e("BugLens", "FastAPI upload error", t)
+                onResult(false)
             }
         })
     }

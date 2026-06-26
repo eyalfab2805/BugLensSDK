@@ -11,34 +11,58 @@
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="BugLens Demo App"
-        android:textSize="24sp"
+        android:text="BugShop Checkout"
+        android:textSize="28sp"
         android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@+id/tvSubtitle"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed" />
+
+    <TextView
+        android:id="@+id/tvSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Screen: CheckoutScreen • Feature: Payments"
+        android:textSize="15sp"
         app:layout_constraintBottom_toTopOf="@+id/btnBugLens"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintVertical_chainStyle="packed"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/tvTitle" />
 
     <Button
         android:id="@+id/btnBugLens"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Open BugLens Reporter"
         android:layout_marginTop="24dp"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:text="Report Bug"
+        app:layout_constraintBottom_toTopOf="@+id/btnCrash"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/tvSubtitle" />
 
     <Button
         android:id="@+id/btnCrash"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Crash App"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/btnBugLens"
+        android:layout_marginTop="14dp"
+        android:text="Simulate Crash"
+        app:layout_constraintBottom_toTopOf="@+id/btnSwitchScreen"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/btnBugLens" />
+
+    <Button
+        android:id="@+id/btnSwitchScreen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="Switch to Product Screen"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnCrash" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

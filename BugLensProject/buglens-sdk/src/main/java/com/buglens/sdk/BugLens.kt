@@ -8,8 +8,8 @@ import android.widget.Toast
 import com.buglens.sdk.collectors.DeviceInfoCollector
 import com.buglens.sdk.models.BugReport
 import com.buglens.sdk.reporter.BugReportDialog
+import com.buglens.sdk.repository.ReportRepository
 import com.buglens.sdk.shake.ShakeDetector
-import com.buglens.sdk.upload.ReportApiUploader
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.util.UUID
@@ -27,8 +27,12 @@ object BugLens {
     private var previousCrashHandler: Thread.UncaughtExceptionHandler? = null
 
     fun init(context: Context, apiKey: String) {
-        this.appContext = context.applicationContext
+        val applicationContext = context.applicationContext
+
+        this.appContext = applicationContext
         this.apiKey = apiKey
+
+        ReportRepository.uploadPendingReports(applicationContext)
     }
 
     fun showReporter(activity: Activity) {
@@ -54,7 +58,11 @@ object BugLens {
         val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         if (accelerometer == null) {
-            Toast.makeText(activity, "BugLens: Accelerometer not available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                activity,
+                "BugLens: Accelerometer not available",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
 
@@ -70,7 +78,11 @@ object BugLens {
             SensorManager.SENSOR_DELAY_UI
         )
 
-        Toast.makeText(activity, "BugLens shake-to-report enabled", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            activity,
+            "BugLens shake-to-report enabled",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun disableShakeToReport() {
@@ -84,6 +96,10 @@ object BugLens {
 
     fun enableCrashReporting() {
         val context = appContext ?: return
+
+        if (previousCrashHandler != null) {
+            return
+        }
 
         previousCrashHandler = Thread.getDefaultUncaughtExceptionHandler()
 
@@ -109,7 +125,7 @@ object BugLens {
                 screenshotPath = null
             )
 
-            ReportApiUploader.upload(context, crashReport)
+            ReportRepository.submit(context, crashReport)
 
             Thread.sleep(1000)
 

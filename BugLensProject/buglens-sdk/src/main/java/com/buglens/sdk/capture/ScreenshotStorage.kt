@@ -8,6 +8,8 @@ import java.util.UUID
 
 object ScreenshotStorage {
 
+    private const val DIRECTORY_NAME = "buglens_screenshots"
+
     fun save(
         context: Context,
         bitmap: Bitmap
@@ -19,8 +21,18 @@ object ScreenshotStorage {
         context: Context,
         bitmap: Bitmap
     ): File {
+
+        val screenshotDirectory = File(
+            context.filesDir,
+            DIRECTORY_NAME
+        )
+
+        if (!screenshotDirectory.exists()) {
+            screenshotDirectory.mkdirs()
+        }
+
         val file = File(
-            context.cacheDir,
+            screenshotDirectory,
             "buglens_${UUID.randomUUID()}.png"
         )
 
@@ -33,5 +45,15 @@ object ScreenshotStorage {
         }
 
         return file
+    }
+
+    fun deleteScreenshot(path: String?) {
+        if (path.isNullOrBlank()) return
+
+        val file = File(path)
+
+        if (file.exists()) {
+            file.delete()
+        }
     }
 }

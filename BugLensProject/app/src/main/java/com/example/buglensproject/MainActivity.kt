@@ -2,6 +2,7 @@ package com.example.buglensproject
 
 import android.os.Bundle
 import android.widget.Button
+import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -10,11 +11,21 @@ import com.buglens.sdk.BugLens
 
 class MainActivity : AppCompatActivity() {
 
+    private var isCheckoutScreen = true
+
+    private lateinit var titleText: TextView
+    private lateinit var subtitleText: TextView
+    private lateinit var switchScreenButton: Button
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
+        titleText = findViewById(R.id.tvTitle)
+        subtitleText = findViewById(R.id.tvSubtitle)
+        switchScreenButton = findViewById(R.id.btnSwitchScreen)
 
         BugLens.init(
             context = applicationContext,
@@ -23,15 +34,7 @@ class MainActivity : AppCompatActivity() {
 
         BugLens.setUserId("demo-user-123")
 
-        BugLens.setMetadata(
-            key = "screen",
-            value = "MainActivity"
-        )
-
-        BugLens.setMetadata(
-            key = "feature",
-            value = "Bug Reporting Demo"
-        )
+        updateDemoScreen()
 
         BugLens.enableShakeToReport(this)
         BugLens.enableCrashReporting()
@@ -41,7 +44,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnCrash).setOnClickListener {
-            throw RuntimeException("BugLens test crash")
+            val screenName = if (isCheckoutScreen) {
+                "Checkout"
+            } else {
+                "Product"
+            }
+
+            throw RuntimeException("BugLens simulated $screenName screen crash")
+        }
+
+        switchScreenButton.setOnClickListener {
+            isCheckoutScreen = !isCheckoutScreen
+            updateDemoScreen()
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { view, insets ->
@@ -56,6 +70,38 @@ class MainActivity : AppCompatActivity() {
             )
 
             insets
+        }
+    }
+
+    private fun updateDemoScreen() {
+        if (isCheckoutScreen) {
+            titleText.text = "BugShop Checkout"
+            subtitleText.text = "Screen: CheckoutScreen • Feature: Payments"
+            switchScreenButton.text = "Switch to Product Screen"
+
+            BugLens.setMetadata(
+                key = "screen",
+                value = "CheckoutScreen"
+            )
+
+            BugLens.setMetadata(
+                key = "feature",
+                value = "Payments"
+            )
+        } else {
+            titleText.text = "BugShop Product"
+            subtitleText.text = "Screen: ProductScreen • Feature: Product Catalog"
+            switchScreenButton.text = "Switch to Checkout Screen"
+
+            BugLens.setMetadata(
+                key = "screen",
+                value = "ProductScreen"
+            )
+
+            BugLens.setMetadata(
+                key = "feature",
+                value = "Product Catalog"
+            )
         }
     }
 

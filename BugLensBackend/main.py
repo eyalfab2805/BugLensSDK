@@ -90,14 +90,25 @@ async def upload_screenshot(file: UploadFile = File(...)):
 
 @app.post("/reports", response_model=ReportResponse)
 def create_report(report: ReportCreate, db: Session = Depends(get_db)):
+    print("Incoming report id:", report.report_id)
+    print("Incoming severity:", report.severity)
+
     if report.report_type not in VALID_REPORT_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"Report type must be one of {VALID_REPORT_TYPES}",
         )
 
-    report_id = str(uuid4())
+    report_id = report.report_id or str(uuid4())
     created_at = int(datetime.now().timestamp() * 1000)
+
+    existing_report = db.query(Report).filter(Report.report_id == report_id).first()
+
+    if existing_report is not None:
+        return ReportResponse(
+            success=True,
+            report_id=existing_report.report_id,
+        )
 
     db_report = Report(
         report_id=report_id,
