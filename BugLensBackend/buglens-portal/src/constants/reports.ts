@@ -1,4 +1,4 @@
-import type { ReportStatus, ReportType } from "../types/reports";
+import type { ReportSeverity, ReportStatus, ReportType } from "../types/reports";
 
 export const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -10,6 +10,13 @@ export const statuses: ReportStatus[] = [
 ];
 
 export const reportTypes: ReportType[] = ["bug", "crash"];
+
+export const severities: ReportSeverity[] = [
+  "Low",
+  "Medium",
+  "High",
+  "Critical",
+];
 
 export const statusLabels: Record<ReportStatus, string> = {
   open: "Open",

@@ -1,17 +1,26 @@
-import { reportTypeLabels, statusLabels, statuses } from "../constants/reports";
+import { reportTypeLabels, statusLabels } from "../constants/reports";
 import type { BugReport, ReportStatus } from "../types/reports";
 import { formatDate, getMetadataValue } from "../utils/reportAnalytics";
+import { StatusWorkflow } from "./StatusWorkflow";
 
 type ReportDetailsPanelProps = {
   selectedReport: BugReport | null;
   onPreviewImage: (url: string) => void;
   onUpdateStatus: (reportId: string, newStatus: ReportStatus) => Promise<void>;
+  statusUpdating: boolean;
+  onStartWorking: (reportId: string) => void;
+  onOpenTodo: () => void;
+  onReopen: (reportId: string) => void;
 };
 
 export function ReportDetailsPanel({
   selectedReport,
   onPreviewImage,
   onUpdateStatus,
+  statusUpdating,
+  onStartWorking,
+  onOpenTodo,
+  onReopen,
 }: ReportDetailsPanelProps) {
   return (
     <aside className="panel details-panel">
@@ -31,22 +40,47 @@ export function ReportDetailsPanel({
               <h3>{selectedReport.title}</h3>
               <p className="report-id">{selectedReport.report_id}</p>
             </div>
+          </div>
 
-            <select
-              value={selectedReport.status}
-              onChange={(event) =>
-                void onUpdateStatus(
-                  selectedReport.report_id,
-                  event.target.value as ReportStatus
-                )
+          <div className="status-panel">
+            <div className="status-panel-header">
+              <span className="section-label">Workflow state</span>
+              <span className={`status-pill ${selectedReport.status}`}>
+                {statusLabels[selectedReport.status]}
+              </span>
+            </div>
+
+            <div className="status-actions">
+              {selectedReport.status === "resolved" || selectedReport.status === "closed" ? (
+                <button
+                  className="primary-button"
+                  disabled={statusUpdating}
+                  onClick={() => onReopen(selectedReport.report_id)}
+                >
+                  Reopen Bug
+                </button>
+              ) : (
+                <button
+                  className="primary-button"
+                  disabled={statusUpdating || selectedReport.status === "in_progress"}
+                  onClick={() => onStartWorking(selectedReport.report_id)}
+                >
+                  Start Working
+                </button>
+              )}
+
+              <button className="secondary-button" onClick={onOpenTodo}>
+                Open Todo
+              </button>
+            </div>
+
+            <StatusWorkflow
+              currentStatus={selectedReport.status}
+              busy={statusUpdating}
+              onChange={(nextStatus) =>
+                void onUpdateStatus(selectedReport.report_id, nextStatus)
               }
-            >
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {statusLabels[status]}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <p className="description">{selectedReport.description}</p>

@@ -1,17 +1,21 @@
 import {
   reportTypeLabels,
   reportTypes,
+  severities,
   statusLabels,
   statuses,
 } from "../constants/reports";
 import type {
   BugReport,
+  ClusterSummary,
   CountItem,
-  ReportSeverity,
+  PriorityBucket,
+  ReleaseDiagnostics,
+  ReleaseHealthSummary,
+  ReportFilters,
   TimeItem,
 } from "../types/reports";
 
-const severities: ReportSeverity[] = ["Low", "Medium", "High", "Critical"];
 const staleReportDays = 3;
 const recentReportHours = 24;
 
@@ -69,6 +73,68 @@ export function formatDate(value: string | null): string {
 
 export function getScreenshotUrl(path: string): string {
   return path.replace("10.0.2.2", "127.0.0.1");
+}
+
+export function filterReports(
+  reports: BugReport[],
+  filters: ReportFilters,
+  deferredSearch: string
+): BugReport[] {
+  const normalizedSearch = deferredSearch.trim().toLowerCase();
+
+  return reports.filter((report) => {
+    if (filters.status !== "all" && report.status !== filters.status) {
+      return false;
+    }
+
+    if (filters.severity !== "all" && report.severity !== filters.severity) {
+      return false;
+    }
+
+    if (filters.reportType !== "all" && report.report_type !== filters.reportType) {
+      return false;
+    }
+
+    if (
+      filters.appVersion !== "all" &&
+      (report.app_version || "Unknown") !== filters.appVersion
+    ) {
+      return false;
+    }
+
+    if (filters.screenshotOnly && !report.screenshot_path) {
+      return false;
+    }
+
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    const haystack = [
+      report.title,
+      report.description,
+      report.report_id,
+      report.user_id,
+      report.device_model,
+      report.manufacturer,
+      report.android_version,
+      report.app_version,
+      report.stack_trace,
+      getMetadataValue(report, "screen"),
+      getMetadataValue(report, "feature"),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(normalizedSearch);
+  });
+}
+
+export function getAvailableAppVersions(reports: BugReport[]): string[] {
+  return Array.from(new Set(reports.map((report) => report.app_version || "Unknown"))).sort(
+    compareVersionValues
+  );
 }
 
 export function buildDashboardMetrics(reports: BugReport[]): DashboardMetrics {
@@ -210,6 +276,143 @@ export function buildDashboardMetrics(reports: BugReport[]): DashboardMetrics {
   };
 }
 
+export function buildPriorityBuckets(reports: BugReport[]): PriorityBucket[] {
+  const unresolvedCritical = reports
+    .filter(
+      (report) =>
+        report.severity === "Critical" &&
+        (report.status === "open" || report.status === "in_progress")
+    )
+    .slice(0, 5);
+
+  const staleOpen = reports
+    .filter(
+      (report) => report.status === "open" && getAgeInDays(report.created_at) >= staleReportDays
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime()
+    )
+    .slice(0, 5);
+
+  const recentCrashes = reports
+    .filter(
+      (report) =>
+        report.report_type === "crash" && isRecent(report.created_at, recentReportHours)
+    )
+    .slice(0, 5);
+
+  return [
+    {
+      label: "Critical unresolved",
+      helper: "Highest urgency items still not resolved.",
+      tone: unresolvedCritical.length > 0 ? "danger" : "success",
+      reports: unresolvedCritical,
+    },
+    {
+      label: "Stale open",
+      helper: `Open for ${staleReportDays}+ days and still untouched.`,
+      tone: staleOpen.length > 0 ? "warning" : "success",
+      reports: staleOpen,
+    },
+    {
+      label: "New crashes",
+      helper: "Fresh crash reports in the last 24 hours.",
+      tone: recentCrashes.length > 0 ? "warning" : "success",
+      reports: recentCrashes,
+    },
+  ];
+}
+
+export function buildIssueClusters(reports: BugReport[]): ClusterSummary[] {
+  const groups = new Map<string, BugReport[]>();
+
+  reports.forEach((report) => {
+    const fingerprint = getClusterFingerprint(report);
+    const existing = groups.get(fingerprint) || [];
+    existing.push(report);
+    groups.set(fingerprint, existing);
+  });
+
+  return Array.from(groups.entries())
+    .map(([key, items]) => {
+      const exemplar = items[0];
+      const sortedVersions = Array.from(
+        new Set(items.map((report) => report.app_version || "Unknown"))
+      ).sort(compareVersionValues);
+
+      return {
+        key,
+        title: getClusterTitle(exemplar),
+        reportType: exemplar.report_type,
+        severity: highestSeverity(items),
+        count: items.length,
+        affectedUsers: new Set(items.map((report) => report.user_id || "Anonymous")).size,
+        latestSeen: items[0]?.created_at || null,
+        appVersions: sortedVersions.slice(0, 3),
+        exemplar,
+      };
+    })
+    .sort((left, right) => {
+      const severityGap = severityRank(right.severity) - severityRank(left.severity);
+      if (severityGap !== 0) {
+        return severityGap;
+      }
+
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+
+      return (
+        new Date(right.latestSeen || 0).getTime() - new Date(left.latestSeen || 0).getTime()
+      );
+    })
+    .slice(0, 8);
+}
+
+export function buildReleaseHealth(reports: BugReport[]): ReleaseHealthSummary[] {
+  const grouped = new Map<string, BugReport[]>();
+
+  reports.forEach((report) => {
+    const version = report.app_version || "Unknown";
+    const existing = grouped.get(version) || [];
+    existing.push(report);
+    grouped.set(version, existing);
+  });
+
+  return Array.from(grouped.entries())
+    .map(([version, items]) => ({
+      version,
+      totalReports: items.length,
+      crashReports: items.filter((report) => report.report_type === "crash").length,
+      openReports: items.filter(
+        (report) => report.status === "open" || report.status === "in_progress"
+      ).length,
+      criticalReports: items.filter((report) => report.severity === "Critical").length,
+      latestSeen: items[0]?.created_at || null,
+    }))
+    .sort((left, right) => {
+      const versionOrder = compareVersionValues(left.version, right.version);
+      if (versionOrder !== 0) {
+        return versionOrder;
+      }
+
+      return right.totalReports - left.totalReports;
+    })
+    .slice(0, 6);
+}
+
+export function buildReleaseDiagnostics(reports: BugReport[]): ReleaseDiagnostics {
+  const clusters = buildIssueClusters(reports);
+
+  return {
+    topFeature: getTopValue(reports, (report) => getMetadataValue(report, "feature")),
+    topScreen: getTopValue(reports, (report) => getMetadataValue(report, "screen")),
+    topClusterTitle: clusters[0]?.title || "N/A",
+    topClusterCount: clusters[0]?.count || 0,
+  };
+}
+
 function getTopValue(
   reports: BugReport[],
   selector: (report: BugReport) => string
@@ -277,4 +480,77 @@ function getAgeInDays(value: string | null): number {
 
 function normalizeTimeValue(value: string): Date {
   return value === "Unknown" ? new Date(0) : new Date(value);
+}
+
+function getClusterFingerprint(report: BugReport): string {
+  if (report.report_type === "crash" && report.stack_trace) {
+    return firstMeaningfulLine(report.stack_trace).toLowerCase();
+  }
+
+  return `${report.report_type}:${report.title.trim().toLowerCase()}`;
+}
+
+function getClusterTitle(report: BugReport): string {
+  if (report.report_type === "crash" && report.stack_trace) {
+    return firstMeaningfulLine(report.stack_trace);
+  }
+
+  return report.title;
+}
+
+function firstMeaningfulLine(stackTrace: string): string {
+  return (
+    stackTrace
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) || "Unknown crash signature"
+  );
+}
+
+function highestSeverity(reports: BugReport[]) {
+  return reports.reduce(
+    (current, report) =>
+      severityRank(report.severity) > severityRank(current) ? report.severity : current,
+    reports[0]?.severity || "Low"
+  );
+}
+
+function severityRank(value: BugReport["severity"]): number {
+  switch (value) {
+    case "Critical":
+      return 4;
+    case "High":
+      return 3;
+    case "Medium":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function compareVersionValues(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === "Unknown") {
+    return 1;
+  }
+
+  if (right === "Unknown") {
+    return -1;
+  }
+
+  const leftParts = left.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = right.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const gap = (rightParts[index] || 0) - (leftParts[index] || 0);
+    if (gap !== 0) {
+      return gap;
+    }
+  }
+
+  return right.localeCompare(left);
 }

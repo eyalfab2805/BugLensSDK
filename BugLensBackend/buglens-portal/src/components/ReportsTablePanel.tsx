@@ -1,23 +1,21 @@
-import { reportTypeLabels, statusLabels, statuses } from "../constants/reports";
-import type { BugReport, ReportStatus } from "../types/reports";
+import { reportTypeLabels, statusLabels } from "../constants/reports";
+import type { BugReport } from "../types/reports";
 import { formatDate, getMetadataValue } from "../utils/reportAnalytics";
 
 type ReportsTablePanelProps = {
   loading: boolean;
   reports: BugReport[];
   selectedReport: BugReport | null;
-  statusFilter: ReportStatus | "all";
+  resultCount: number;
   onSelectReport: (report: BugReport) => void;
-  onStatusFilterChange: (value: ReportStatus | "all") => void;
 };
 
 export function ReportsTablePanel({
   loading,
   reports,
   selectedReport,
-  statusFilter,
+  resultCount,
   onSelectReport,
-  onStatusFilterChange,
 }: ReportsTablePanelProps) {
   return (
     <div className="panel">
@@ -27,19 +25,10 @@ export function ReportsTablePanel({
           <h2>Incoming bug reports</h2>
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            onStatusFilterChange(event.target.value as ReportStatus | "all")
-          }
-        >
-          <option value="all">All statuses</option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>
-              {statusLabels[status]}
-            </option>
-          ))}
-        </select>
+        <div className="filter-summary compact">
+          <strong>{resultCount}</strong>
+          <span>results</span>
+        </div>
       </div>
 
       {loading ? (

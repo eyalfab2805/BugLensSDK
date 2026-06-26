@@ -18,7 +18,7 @@ export function DashboardOverview({
       <section className="hero">
         <div>
           <p className="eyebrow">BugLens SDK / Developer Portal</p>
-          <h1>Production-grade Android issue intelligence.</h1>
+          <h1>BugLens dashboard.</h1>
           <p className="subtitle">
             Centralized crash and bug reporting for Android teams: inspect device
             context, prioritize open issues, and manage the full triage lifecycle from
