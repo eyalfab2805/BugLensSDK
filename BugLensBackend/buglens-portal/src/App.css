@@ -102,6 +102,28 @@ select {
   outline: none;
 }
 
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.hero-stat {
+  min-width: 220px;
+  padding: 16px 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 18px;
+  background: rgba(2, 6, 23, 0.44);
+}
+
+.hero-stat strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 850;
+}
+
 .refresh-button {
   cursor: pointer;
   transition: 0.18s ease;
@@ -124,6 +146,13 @@ select:hover {
 }
 
 .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.focus-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
@@ -174,6 +203,13 @@ select:hover {
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.metric-card p {
+  margin: 10px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .metric-card.danger {
@@ -368,6 +404,44 @@ tbody tr:hover,
   color: #cbd5e1;
 }
 
+.severity-pill,
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.severity-pill.low {
+  background: rgba(52, 211, 153, 0.14);
+  color: #a7f3d0;
+}
+
+.severity-pill.medium {
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+.severity-pill.high {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.severity-pill.critical,
+.type-pill.crash {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+}
+
+.type-pill.bug {
+  background: rgba(167, 139, 250, 0.14);
+  color: #ddd6fe;
+}
+
 .details-panel {
   position: sticky;
   top: 24px;
@@ -442,6 +516,13 @@ tbody tr:hover,
   border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
+.stack-trace {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .empty-state {
   color: #94a3b8;
   line-height: 1.7;
@@ -506,6 +587,7 @@ tbody tr:hover,
 
 @media (max-width: 1200px) {
   .kpi-grid,
+  .focus-grid,
   .analytics-grid,
   .workspace-grid {
     grid-template-columns: 1fr;
@@ -522,6 +604,7 @@ tbody tr:hover,
   }
 
   .hero,
+  .hero-actions,
   .panel-header,
   .details-title-row,
   .insight-panel {
@@ -530,6 +613,10 @@ tbody tr:hover,
   }
 
   .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-grid {
     grid-template-columns: 1fr;
   }
 
