@@ -103,22 +103,6 @@ def get_group_title(report: ReportOut) -> str:
     return report.title
 
 
-def get_priority_score(report: ReportOut) -> int:
-    severity_score = SEVERITY_RANK.get(report.severity, 2) * 20
-    unresolved_score = 20 if report.status in {"open", "in_progress"} else 0
-    crash_score = 12 if report.report_type == "crash" else 0
-    screenshot_score = 4 if report.screenshot_path else 0
-    recency_score = 8 if is_recent(report.created_at, 24) else 0
-    return severity_score + unresolved_score + crash_score + screenshot_score + recency_score
-
-
-def is_recent(value: Optional[datetime], hours: int) -> bool:
-    if value is None:
-      return False
-
-    return value.timestamp() >= datetime.now().timestamp() - hours * 60 * 60
-
-
 def get_top_severity(reports: List[ReportOut]) -> str:
     return max(
         (report.severity for report in reports),
@@ -207,9 +191,6 @@ def to_issue_groups(reports: List[ReportOut]) -> List[IssueGroupOut]:
             reverse=True,
         )
         severity = get_top_severity(sorted_items)
-        priority_score = sum(get_priority_score(report) for report in unresolved_reports[:5])
-        priority_score += min(len(sorted_items), 10) * 3
-        priority_score += len(affected_users) * 5
 
         issue_groups.append(
             IssueGroupOut(
@@ -220,7 +201,6 @@ def to_issue_groups(reports: List[ReportOut]) -> List[IssueGroupOut]:
                 total_reports=len(sorted_items),
                 unresolved_reports=len(unresolved_reports),
                 affected_users=len(affected_users),
-                priority_score=priority_score,
                 latest_seen=sorted_items[0].created_at,
                 app_versions=app_versions[:5],
                 representative_report_id=sorted_items[0].report_id,
@@ -230,7 +210,8 @@ def to_issue_groups(reports: List[ReportOut]) -> List[IssueGroupOut]:
     return sorted(
         issue_groups,
         key=lambda group: (
-            group.priority_score,
+            SEVERITY_RANK.get(group.severity, 0),
+            group.unresolved_reports,
             group.total_reports,
             group.latest_seen or datetime.fromtimestamp(0),
         ),

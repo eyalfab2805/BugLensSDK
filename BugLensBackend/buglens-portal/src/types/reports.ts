@@ -91,7 +91,6 @@ export type IssueGroupSummary = {
   total_reports: number;
   unresolved_reports: number;
   affected_users: number;
-  priority_score: number;
   latest_seen: string | null;
   app_versions: string[];
   representative_report_id: string;

@@ -41,8 +41,8 @@ export function IssueClustersPanel({
                 {reportTypeLabels[cluster.report_type]}
               </p>
               <span>
-                Priority {cluster.priority_score} / versions {cluster.app_versions.join(", ")} /
-                latest seen {formatDate(cluster.latest_seen)}
+                Versions {cluster.app_versions.join(", ")} / latest seen{" "}
+                {formatDate(cluster.latest_seen)}
               </span>
             </button>
           ))}

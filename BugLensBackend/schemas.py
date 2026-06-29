@@ -60,7 +60,6 @@ class IssueGroupOut(BaseModel):
     total_reports: int
     unresolved_reports: int
     affected_users: int
-    priority_score: int
     latest_seen: Optional[datetime] = None
     app_versions: List[str]
     representative_report_id: str
