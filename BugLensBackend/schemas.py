@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -63,3 +63,30 @@ class IssueGroupOut(BaseModel):
     latest_seen: Optional[datetime] = None
     app_versions: List[str]
     representative_report_id: str
+
+
+class BreakdownItem(BaseModel):
+    label: str
+    count: int
+
+
+class AnalyticsSummaryOut(BaseModel):
+    total_reports: int
+    open_reports: int
+    in_progress_reports: int
+    resolved_reports: int
+    crash_reports: int
+    bug_reports: int
+    critical_reports: int
+    screenshot_reports: int
+    affected_users: int
+    top_device: str
+    top_android_version: str
+    top_app_version: str
+    top_feature: str
+    top_screen: str
+    top_manufacturer: str
+    latest_report_at: Optional[datetime] = None
+    device_breakdown: List[BreakdownItem]
+    app_version_breakdown: List[BreakdownItem]
+    severity_breakdown: List[BreakdownItem]

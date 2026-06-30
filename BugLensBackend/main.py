@@ -1,5 +1,4 @@
-from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 from uuid import uuid4
 from fastapi.staticfiles import StaticFiles
 import json
@@ -9,18 +8,28 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from database import Base, engine, get_db
+from database import Base, engine, ensure_database_schema, get_db
+from db import (
+    create_report_record,
+    get_existing_report,
+    get_report_by_id as db_get_report_by_id,
+    get_reports as db_get_reports,
+    update_report_status as db_update_report_status,
+)
 from models import Report
 from schemas import (
+    AnalyticsSummaryOut,
     IssueGroupOut,
     ReportCreate,
     ReportOut,
     ReportResponse,
     StatusUpdate,
 )
+from services import build_analytics_summary, now_millis, report_to_out, to_issue_groups
 
 
 Base.metadata.create_all(bind=engine)
+ensure_database_schema()
 
 app = FastAPI(title="BugLens API")
 
@@ -51,172 +60,36 @@ VALID_REPORT_TYPES = [
     "crash",
 ]
 
-SEVERITY_RANK = {
-    "Low": 1,
-    "Medium": 2,
-    "High": 3,
-    "Critical": 4,
-}
+VALID_SEVERITIES = [
+    "Low",
+    "Medium",
+    "High",
+    "Critical",
+]
 
 
-def report_to_out(report: Report) -> ReportOut:
-    return ReportOut(
-        report_id=report.report_id,
-        api_key=report.api_key,
-        user_id=report.user_id,
-        title=report.title,
-        description=report.description,
-        device_model=report.device_model,
-        manufacturer=report.manufacturer,
-        android_version=report.android_version,
-        app_version=report.app_version,
-        screenshot_path=report.screenshot_path,
-        metadata=json.loads(report.metadata_json or "{}"),
-        severity=report.severity or "Medium",
-        report_type=report.report_type or "bug",
-        stack_trace=report.stack_trace,
-        status=report.status,
-        created_at=datetime.fromtimestamp(report.created_at / 1000)
-        if report.created_at
-        else None,
-    )
-
-
-def normalize_fingerprint(report: ReportOut) -> str:
-    if report.report_type == "crash" and report.stack_trace:
-        first_line = next(
-            (line.strip() for line in report.stack_trace.splitlines() if line.strip()),
-            "unknown crash signature",
-        )
-        return f"crash:{first_line.lower()}"
-
-    return f"{report.report_type}:{report.title.strip().lower()}"
-
-
-def get_group_title(report: ReportOut) -> str:
-    if report.report_type == "crash" and report.stack_trace:
-        return next(
-            (line.strip() for line in report.stack_trace.splitlines() if line.strip()),
-            report.title,
+def ensure_valid_status(status: Optional[str]) -> None:
+    if status is not None and status not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status must be one of {VALID_STATUSES}",
         )
 
-    return report.title
 
-
-def get_top_severity(reports: List[ReportOut]) -> str:
-    return max(
-        (report.severity for report in reports),
-        key=lambda severity: SEVERITY_RANK.get(severity, 0),
-        default="Low",
-    )
-
-
-def apply_report_filters(
-    reports: List[ReportOut],
-    status: Optional[str],
-    severity: Optional[str],
-    report_type: Optional[str],
-    app_version: Optional[str],
-    screenshot_only: bool,
-    search: Optional[str],
-) -> List[ReportOut]:
-    filtered = reports
-
-    if status:
-        filtered = [report for report in filtered if report.status == status]
-
-    if severity:
-        filtered = [report for report in filtered if report.severity == severity]
-
-    if report_type:
-        filtered = [report for report in filtered if report.report_type == report_type]
-
-    if app_version:
-        filtered = [
-            report
-            for report in filtered
-            if (report.app_version or "Unknown") == app_version
-        ]
-
-    if screenshot_only:
-        filtered = [report for report in filtered if report.screenshot_path]
-
-    if not search:
-        return filtered
-
-    normalized_search = search.strip().lower()
-    return [
-        report
-        for report in filtered
-        if normalized_search
-        in " ".join(
-            [
-                report.title,
-                report.description,
-                report.report_id,
-                report.user_id or "",
-                report.device_model or "",
-                report.manufacturer or "",
-                report.android_version or "",
-                report.app_version or "",
-                report.stack_trace or "",
-                report.metadata.get("screen", "") if report.metadata else "",
-                report.metadata.get("feature", "") if report.metadata else "",
-            ]
-        ).lower()
-    ]
-
-
-def to_issue_groups(reports: List[ReportOut]) -> List[IssueGroupOut]:
-    grouped: Dict[str, List[ReportOut]] = {}
-
-    for report in reports:
-        fingerprint = normalize_fingerprint(report)
-        grouped.setdefault(fingerprint, []).append(report)
-
-    issue_groups: List[IssueGroupOut] = []
-
-    for fingerprint, items in grouped.items():
-        sorted_items = sorted(
-            items,
-            key=lambda report: report.created_at or datetime.fromtimestamp(0),
-            reverse=True,
-        )
-        unresolved_reports = [
-            report for report in sorted_items if report.status in {"open", "in_progress"}
-        ]
-        affected_users = {report.user_id or "Anonymous" for report in sorted_items}
-        app_versions = sorted(
-            {report.app_version or "Unknown" for report in sorted_items},
-            reverse=True,
-        )
-        severity = get_top_severity(sorted_items)
-
-        issue_groups.append(
-            IssueGroupOut(
-                fingerprint=fingerprint,
-                title=get_group_title(sorted_items[0]),
-                report_type=sorted_items[0].report_type,
-                severity=severity,
-                total_reports=len(sorted_items),
-                unresolved_reports=len(unresolved_reports),
-                affected_users=len(affected_users),
-                latest_seen=sorted_items[0].created_at,
-                app_versions=app_versions[:5],
-                representative_report_id=sorted_items[0].report_id,
-            )
+def ensure_valid_report_type(report_type: Optional[str]) -> None:
+    if report_type is not None and report_type not in VALID_REPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
         )
 
-    return sorted(
-        issue_groups,
-        key=lambda group: (
-            SEVERITY_RANK.get(group.severity, 0),
-            group.unresolved_reports,
-            group.total_reports,
-            group.latest_seen or datetime.fromtimestamp(0),
-        ),
-        reverse=True,
-    )
+
+def ensure_valid_severity(severity: Optional[str]) -> None:
+    if severity is not None and severity not in VALID_SEVERITIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Severity must be one of {VALID_SEVERITIES}",
+        )
 
 
 @app.post("/upload-screenshot")
@@ -231,16 +104,13 @@ async def upload_screenshot(file: UploadFile = File(...)):
 
 @app.post("/reports", response_model=ReportResponse)
 def create_report(report: ReportCreate, db: Session = Depends(get_db)):
-    if report.report_type not in VALID_REPORT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
-        )
+    ensure_valid_report_type(report.report_type)
+    ensure_valid_severity(report.severity)
 
     report_id = report.report_id or str(uuid4())
-    created_at = int(datetime.now().timestamp() * 1000)
+    created_at = now_millis()
 
-    existing_report = db.query(Report).filter(Report.report_id == report_id).first()
+    existing_report = get_existing_report(db, report_id)
 
     if existing_report is not None:
         return ReportResponse(success=True, report_id=existing_report.report_id)
@@ -264,57 +134,14 @@ def create_report(report: ReportCreate, db: Session = Depends(get_db)):
         created_at=created_at,
     )
 
-    db.add(db_report)
-    db.commit()
-    db.refresh(db_report)
+    create_report_record(db, db_report)
 
     return ReportResponse(success=True, report_id=report_id)
 
 
 @app.get("/reports", response_model=List[ReportOut])
-def get_reports(db: Session = Depends(get_db)):
-    reports = db.query(Report).order_by(Report.created_at.desc()).all()
-    return [report_to_out(report) for report in reports]
-
-
-@app.get("/reports/status/{status}", response_model=List[ReportOut])
-def get_reports_by_status(status: str, db: Session = Depends(get_db)):
-    if status not in VALID_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Status must be one of {VALID_STATUSES}",
-        )
-
-    reports = (
-        db.query(Report)
-        .filter(Report.status == status)
-        .order_by(Report.created_at.desc())
-        .all()
-    )
-
-    return [report_to_out(report) for report in reports]
-
-
-@app.get("/reports/type/{report_type}", response_model=List[ReportOut])
-def get_reports_by_type(report_type: str, db: Session = Depends(get_db)):
-    if report_type not in VALID_REPORT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
-        )
-
-    reports = (
-        db.query(Report)
-        .filter(Report.report_type == report_type)
-        .order_by(Report.created_at.desc())
-        .all()
-    )
-
-    return [report_to_out(report) for report in reports]
-
-
-@app.get("/issues/groups", response_model=List[IssueGroupOut])
-def get_issue_groups(
+def get_reports(
+    api_key: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     severity: Optional[str] = Query(default=None),
     report_type: Optional[str] = Query(default=None),
@@ -323,22 +150,13 @@ def get_issue_groups(
     search: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    if status is not None and status not in VALID_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Status must be one of {VALID_STATUSES}",
-        )
+    ensure_valid_status(status)
+    ensure_valid_report_type(report_type)
+    ensure_valid_severity(severity)
 
-    if report_type is not None and report_type not in VALID_REPORT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Report type must be one of {VALID_REPORT_TYPES}",
-        )
-
-    reports = db.query(Report).order_by(Report.created_at.desc()).all()
-    report_out_items = [report_to_out(report) for report in reports]
-    filtered_reports = apply_report_filters(
-        report_out_items,
+    reports = db_get_reports(
+        db,
+        api_key=api_key,
         status=status,
         severity=severity,
         report_type=report_type,
@@ -346,12 +164,82 @@ def get_issue_groups(
         screenshot_only=screenshot_only,
         search=search,
     )
-    return to_issue_groups(filtered_reports)
+    return [report_to_out(report) for report in reports]
+
+
+@app.get("/reports/status/{status}", response_model=List[ReportOut])
+def get_reports_by_status(status: str, db: Session = Depends(get_db)):
+    ensure_valid_status(status)
+    reports = db_get_reports(db, status=status)
+    return [report_to_out(report) for report in reports]
+
+
+@app.get("/reports/type/{report_type}", response_model=List[ReportOut])
+def get_reports_by_type(report_type: str, db: Session = Depends(get_db)):
+    ensure_valid_report_type(report_type)
+    reports = db_get_reports(db, report_type=report_type)
+    return [report_to_out(report) for report in reports]
+
+
+@app.get("/issues/groups", response_model=List[IssueGroupOut])
+def get_issue_groups(
+    api_key: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    severity: Optional[str] = Query(default=None),
+    report_type: Optional[str] = Query(default=None),
+    app_version: Optional[str] = Query(default=None),
+    screenshot_only: bool = Query(default=False),
+    search: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    ensure_valid_status(status)
+    ensure_valid_report_type(report_type)
+    ensure_valid_severity(severity)
+
+    reports = db_get_reports(
+        db,
+        api_key=api_key,
+        status=status,
+        severity=severity,
+        report_type=report_type,
+        app_version=app_version,
+        screenshot_only=screenshot_only,
+        search=search,
+    )
+    return to_issue_groups([report_to_out(report) for report in reports])
+
+
+@app.get("/analytics/summary", response_model=AnalyticsSummaryOut)
+def get_analytics_summary(
+    api_key: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    severity: Optional[str] = Query(default=None),
+    report_type: Optional[str] = Query(default=None),
+    app_version: Optional[str] = Query(default=None),
+    screenshot_only: bool = Query(default=False),
+    search: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    ensure_valid_status(status)
+    ensure_valid_report_type(report_type)
+    ensure_valid_severity(severity)
+
+    reports = db_get_reports(
+        db,
+        api_key=api_key,
+        status=status,
+        severity=severity,
+        report_type=report_type,
+        app_version=app_version,
+        screenshot_only=screenshot_only,
+        search=search,
+    )
+    return build_analytics_summary(reports)
 
 
 @app.get("/reports/{report_id}", response_model=ReportOut)
 def get_report_by_id(report_id: str, db: Session = Depends(get_db)):
-    report = db.query(Report).filter(Report.report_id == report_id).first()
+    report = db_get_report_by_id(db, report_id)
 
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -365,20 +253,11 @@ def update_report_status(
     status_update: StatusUpdate,
     db: Session = Depends(get_db),
 ):
-    report = db.query(Report).filter(Report.report_id == report_id).first()
+    ensure_valid_status(status_update.status)
+
+    report = db_get_report_by_id(db, report_id)
 
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    if status_update.status not in VALID_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Status must be one of {VALID_STATUSES}",
-        )
-
-    report.status = status_update.status
-
-    db.commit()
-    db.refresh(report)
-
-    return report_to_out(report)
+    return report_to_out(db_update_report_status(db, report, status_update.status))
